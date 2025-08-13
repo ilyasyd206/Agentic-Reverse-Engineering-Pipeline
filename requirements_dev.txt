@@ -1,0 +1,7 @@
+# requirements-dev.txt
+-r requirements.txt               # все прод-зависимости
+pytest>=8.2                       # юнит-/интеграционные тесты
+pytest-playwright>=0.4            # фикстура page для Playwright
+playwright>=1.44                  # браузерное E2E-тестирование
+pytest-mock>=3.14                 # удобный мок-фикстур
+ruff>=0.4                         # быстрый линтер/форматтер

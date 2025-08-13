@@ -1,0 +1,8 @@
+    # requirements.txt
+streamlit>=1.34,<2.0
+langchain>=0.1.17,<0.2.0          # ядро LangChain (до 0.2 сохраняется обратная совместимость)
+langchain-community>=0.0.34       # новые обёртки LLM/VectorStore
+openai>=1.25                      # официальный SDK OpenAI
+faiss-cpu>=1.7.4                  # векторное хранилище
+tiktoken>=0.6                     # токенайзер для OpenAI-моделей
+python-dotenv>=1.0                # загрузка .env с ключами
