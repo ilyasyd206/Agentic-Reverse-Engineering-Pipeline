@@ -1,20 +1,25 @@
 import os
 import sys
+import subprocess  # <-- ДОДАНО ДЛЯ ВИКЛИКУ GIT
 import streamlit as st
+import streamlit.components.v1 as components
+from plantuml import PlantUML
+from langchain_core.messages import HumanMessage, AIMessage
+
+
+
+# Імпортуємо наш новий граф
+from src.agent_graph import build_graph
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from openai import RateLimitError,  APIError
-from src.data_loader     import build_vectorstore, load_vectorstore
-from src.prompt_template import prompt
-from src.chain_builder   import build_chain
-from src.postprocess     import prepare_output
+from src.data_loader import build_vectorstore, load_vectorstore
 
 st.set_page_config(page_title="AI-asistent SW analýzy", layout="wide")
-
 DOCS_PATH = os.path.join(PROJECT_ROOT, "docs")
+
 
 @st.cache_resource(show_spinner=False)
 def get_vectorstore():
@@ -23,79 +28,156 @@ def get_vectorstore():
     except FileNotFoundError:
         return build_vectorstore(DOCS_PATH)
 
+
 def reset_vectorstore():
     get_vectorstore.clear()
     return get_vectorstore()
 
-# Sidebar
-st.sidebar.header("Nastavenia RAG/LLM")
-k = st.sidebar.slider("k (počet dokumentov)", 1, 10, 5)
-temperature = st.sidebar.slider("Teplota LLM", 0.0, 1.0, 0.2)
 
-if st.sidebar.button("Prebudovať vektorovú databázu"):
-    with st.spinner("Opätovne budujeme vektorovú databázu z docs/..."):
-        vectordb = reset_vectorstore()
-    st.sidebar.success("Hotovo")
-else:
+# --- Ініціалізація стану ---
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+if "graph_app" not in st.session_state:
+    st.session_state.graph_app = build_graph()
+if "repo_ready" not in st.session_state:
+    st.session_state.repo_ready = False
+
+plantuml_server = PlantUML(url='http://www.plantuml.com/plantuml/svg/')
+
+# --- Інтерфейс ---
+st.title("🧠 AI Architecture Analyzer (IEEE Pipeline)")
+
+# ==========================================
+# SIDEBAR (Бічна панель)
+# ==========================================
+st.sidebar.header("Nastavenia RAG")
+k = st.sidebar.slider("Počet kontextových dokumentov (k)", 1, 10, 5)
+if st.sidebar.button("Prebudovať databázu"):
+    with st.spinner("Budujeme vektorovú databázu..."):
+        reset_vectorstore()
+    st.sidebar.success("Hotovo!")
+
+st.sidebar.markdown("---")
+
+# --- НОВИЙ БЛОК: REPO SETUP ---
+# --- НОВИЙ БЛОК: REPO SETUP ---
+st.sidebar.subheader("📦 Repo Setup")
+repo_url = st.sidebar.text_input("GitHub repo URL", placeholder="https://github.com/user/repo")
+
+# Жорстко задаємо шлях для клонування всередині папки docs
+CLONE_DIR = os.path.join(DOCS_PATH, "cloned_repo")
+
+if st.sidebar.button("🔄 Clone & Build RAG"):
+    if not repo_url:
+        st.sidebar.warning("⚠️ Zadaj najprv GitHub URL.")
+    else:
+        with st.spinner("Klonujem repozitár a budujem databázu..."):
+            # 1. Видаляємо стару папку, якщо вона є (щоб не міксувати різні репозиторії)
+            import shutil
+
+            if os.path.exists(CLONE_DIR):
+                shutil.rmtree(CLONE_DIR)
+
+            os.makedirs(CLONE_DIR, exist_ok=True)
+
+            # 2. Клонуємо репозиторій
+            try:
+                subprocess.run(["git", "clone", repo_url, CLONE_DIR], capture_output=True, text=True, check=True)
+                st.sidebar.success("✅ Repozitár úspešne naklonovaný!")
+                st.session_state.repo_ready = True
+
+                # 3. АВТОМАТИЧНО ПЕРЕБУДОВУЄМО БАЗУ ДАНИХ RAG!
+                reset_vectorstore()
+                st.sidebar.success("✅ Vektorová databáza bola aktualizovaná!")
+
+            except subprocess.CalledProcessError as e:
+                st.sidebar.error(f"❌ Chyba pri klonovaní: {e.stderr}")
+            except FileNotFoundError:
+                st.sidebar.error("❌ Git nie je nainštalovaný alebo nie je v PATH.")
+# ==========================================
+# ==========================================
+
+
+# Відображення історії чату
+for msg in st.session_state.messages:
+    if isinstance(msg, HumanMessage):
+        st.chat_message("user").write(msg.content)
+    elif isinstance(msg, AIMessage):
+        st.chat_message("assistant").write(msg.content)
+
+# Поле вводу
+user_input = st.chat_input("Zadajte požiadavku (napr. 'Zgeneruj dokumentaciu pre auth')...")
+
+if user_input:
+    # 1. Показуємо повідомлення юзера
+    st.chat_message("user").write(user_input)
+
+    # 2. Додаємо в пам'ять
+    st.session_state.messages.append(HumanMessage(content=user_input))
+
+    # 3. RAG: Дістаємо контекст (спрощено)
     vectordb = get_vectorstore()
+    docs = vectordb.as_retriever(search_kwargs={"k": k}).invoke(user_input)
+    context_code = "\n---\n".join([d.page_content for d in docs])
 
-# Main UI
-st.title("AI-asistent pre analýzu a vizualizáciu SW")
+    # 4. Запуск графа
+    with st.spinner("AI analyzuje a generuje dokumentáciu..."):
+        initial_state = {
+            "messages": st.session_state.messages,
+            "context_code": context_code,
+            "query": user_input
+        }
 
-use_case  = st.selectbox(
-    "Scenár použitia",
-    ["UC1: Architektúra", "UC2: Dokumentácia", "UC3: Refaktorovanie", "UC4: Hľadanie UML-vzorov"]
-)
-context   = st.text_area(
-    "Kontext (dopln. informácie)",
-    placeholder="Kontext (dopln. informácie)...",
-    height=120
-)
-task_desc = st.text_area(
-    "Popis úlohy",
-    placeholder="Popis úlohy...",
-    height=120
-)
+        # Виклик графа (отримуємо фінальний стан)
+        final_state = st.session_state.graph_app.invoke(initial_state)
 
-if st.button("Spustiť analýzu"):
-    chain = build_chain(vectordb, prompt, k=k, temperature=temperature)
+        # Оновлюємо історію чату з результатів графа
+        st.session_state.messages = final_state["messages"]
 
-    with st.spinner("LLM generuje odpoveď…"):
-        try:
-            raw = chain({
-                "use_case":         use_case,
-                "context":          context,
-                "task_description": task_desc
-            })
-        except RateLimitError:
-            st.error(
-                "Prekročený limit požiadaviek na OpenAI. "
-                "Skontrolujte svoj zostatok a plán na platform.openai.com"
-            )
-            st.stop()
-        except APIError as e:
-            st.error(f"Sieťová chyba OpenAI API: {e}")
-            st.stop()
-        except Exception as e:
-            st.error(f"Chyba pri vykonávaní reťazca: {e}")
-            st.stop()
+        # 5. Відображення результатів
+        with st.chat_message("assistant"):
+            # Якщо граф пройшов повний пайплайн (має ключі діаграм)
+            if "doc_text" in final_state and final_state["doc_text"]:
+                st.write("✅ Generovanie dokončené! Tu sú výsledky:")
 
-    out = prepare_output(raw)
+                # Створюємо вкладки (Tabs) для 4-х елементів зі скетчу
+                tab1, tab2, tab3, tab4 = st.tabs(
+                    ["📄 IEEE Text", "🧱 Class Diagram", "🔄 Sequence Diagram", "🕸️ Weighted Graph"])
 
-    st.subheader("Odpoveď LLM")
-    st.write(out.get("text", ""))
+                with tab1:
+                    st.markdown(final_state["doc_text"])
 
-    if out.get("uml"):
-        st.subheader("PlantUML")
-        for block in out["uml"]:
-            st.code(block, language="plantuml")
 
-    if out.get("source_documents"):
-        st.subheader("Zdroje (source_documents)")
-        # Собираем уникальные пути в порядке появления
-        seen = set()
-        for sd in out["source_documents"]:
-            src = sd.metadata.get("source") or getattr(sd, "source", None)
-            if src and src not in seen:
-                seen.add(src)
-                st.write(f"- {src}")
+                # Функція для рендеру PlantUML
+                def render_puml(puml_code, tab, diagram_id):
+                    with tab:
+                        try:
+                            clean_code = puml_code.replace("```plantuml", "").replace("```", "").strip()
+                            svg_bytes = plantuml_server.processes(clean_code)
+                            svg_string = svg_bytes.decode('utf-8')
+
+                            st.markdown(f"<div style='text-align: center;'>{svg_string}</div>", unsafe_allow_html=True)
+
+                            st.download_button(
+                                label="📥 Stiahnuť PlantUML kód",
+                                data=clean_code,
+                                file_name=f"{diagram_id}.puml",
+                                mime="text/plain",
+                                key=f"btn_{diagram_id}"
+                            )
+
+                            with st.expander("Zobraziť zdrojový kód diagramu"):
+                                st.code(clean_code, language="plantuml")
+
+                        except Exception as e:
+                            st.error(f"Chyba pri renderovaní PlantUML: {e}")
+                            st.code(puml_code)
+
+
+                render_puml(final_state["diagram_class"], tab2, "class_diagram")
+                render_puml(final_state["diagram_sequence"], tab3, "sequence_diagram")
+                render_puml(final_state["diagram_weighted_graph"], tab4, "weighted_graph")
+
+            else:
+                # Якщо це була просто відповідь у чаті
+                st.write(final_state["messages"][-1].content)

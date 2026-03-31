@@ -1,9 +1,11 @@
 import os
 import pickle
-
-from langchain_community.document_loaders import DirectoryLoader, PyPDFLoader
+import shutil
+from langchain_community.document_loaders import DirectoryLoader, PyPDFLoader, TextLoader
 from langchain_community.vectorstores import Chroma
 from sentence_transformers import SentenceTransformer
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+
 
 from .config import CHROMA_DB_DIR
 
@@ -18,10 +20,22 @@ class LocalEmbeddings:
         return self.model.encode([text], convert_to_numpy=True)[0].tolist()
 
 def build_vectorstore(docs_path):
+    if os.path.exists(CHROMA_DB_DIR):
+        try:
+            shutil.rmtree(CHROMA_DB_DIR)  # Видаляє стару папку db
+            print(f"Deleted old DB at {CHROMA_DB_DIR}")
+        except Exception as e:
+            print(f"Error deleting old DB: {e}")
     all_docs = []
     # общий loader
     for glob in ["**/*.md", "**/*.txt", "**/*.py", "**/*.pdf"]:
-        loader = DirectoryLoader(docs_path, glob=glob) if glob != "**/*.pdf" else None
+        # Додали параметр loader_cls=TextLoader 👇
+        loader = DirectoryLoader(
+            docs_path,
+            glob=glob,
+            loader_cls=TextLoader,
+            loader_kwargs={"encoding": "utf-8"}
+        ) if glob != "**/*.pdf" else None
         if loader:
             docs = loader.load()
         else:
@@ -35,17 +49,16 @@ def build_vectorstore(docs_path):
             ext = os.path.splitext(d.metadata["source"])[1].lstrip(".")
             d.metadata["type"] = ext
         all_docs.extend(docs)
-    # кастомная категория, например паттерны
-    patterns_path = os.path.join(docs_path, "patterns")
-    for loader in [DirectoryLoader(patterns_path, glob="**/*.md")]:
-        docs = loader.load()
-        for d in docs:
-            name = os.path.splitext(os.path.basename(d.metadata["source"]))[0]
-            d.metadata["category"] = name.lower()
-        all_docs.extend(docs)
+    # сохраняем
+    text_splitter = RecursiveCharacterTextSplitter(
+        chunk_size=1000,
+        chunk_overlap=200
+    )
+    split_docs = text_splitter.split_documents(all_docs)
+
     # сохраняем
     vectordb = Chroma(persist_directory=CHROMA_DB_DIR, embedding_function=LocalEmbeddings())
-    vectordb.add_documents(all_docs)
+    vectordb.add_documents(split_docs)  # <-- ЗМІНИВ all_docs на split_docs
     return vectordb
 
 
