@@ -2,15 +2,12 @@ import os
 import sys
 import stat
 import shutil
-import subprocess  # <-- ДОДАНО ДЛЯ ВИКЛИКУ GIT
+import subprocess
 import streamlit as st
 import streamlit.components.v1 as components
 from plantuml import PlantUML
 from langchain_core.messages import HumanMessage, AIMessage
 
-
-
-# Імпортуємо наш новий граф
 from src.agent_graph import build_graph
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
@@ -74,7 +71,7 @@ def remove_readonly(func, path, _):
 st.sidebar.subheader("📦 Repo Setup")
 repo_url = st.sidebar.text_input("GitHub repo URL", placeholder="https://github.com/psf/requests")
 
-# Створюємо ізольовану папку ТІЛЬКИ для репозиторіїв
+
 REPOS_DIR = os.path.join(DOCS_PATH, "repos")
 os.makedirs(REPOS_DIR, exist_ok=True)
 
@@ -87,7 +84,7 @@ if st.sidebar.button("🔄 Clone & Build RAG"):
             repo_name = repo_url.rstrip("/").split("/")[-1].replace(".git", "")
             CLONE_DIR = os.path.join(REPOS_DIR, repo_name)
 
-            # Очищаємо ТІЛЬКИ папку repos (книжки в docs залишаються недоторканими!)
+            # Очищаємо Only папку repos
             for item in os.listdir(REPOS_DIR):
                 item_path = os.path.join(REPOS_DIR, item)
                 if os.path.isdir(item_path):
@@ -126,7 +123,7 @@ if user_input:
     # 2. Додаємо в пам'ять
     st.session_state.messages.append(HumanMessage(content=user_input))
 
-    # 3. RAG: Дістаємо контекст (спрощено)
+    # 3. RAG: Дістаємо контекст
     vectordb = get_vectorstore()
     docs = vectordb.as_retriever(search_kwargs={"k": k}).invoke(user_input)
     context_code = "\n---\n".join([d.page_content for d in docs])
@@ -139,7 +136,7 @@ if user_input:
             "query": user_input
         }
 
-        # Виклик графа (отримуємо фінальний стан)
+        # Виклик графа
         final_state = st.session_state.graph_app.invoke(initial_state)
 
         # Оновлюємо історію чату з результатів графа
@@ -147,7 +144,7 @@ if user_input:
 
         # 5. Відображення результатів
         with st.chat_message("assistant"):
-            # Якщо граф пройшов повний пайплайн (має ключі діаграм)
+            # Якщо граф пройшов повний пайплайн
             if "doc_text" in final_state and final_state["doc_text"]:
                 st.write("✅ Generovanie dokončené! Tu sú výsledky:")
 

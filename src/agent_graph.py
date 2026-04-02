@@ -1,4 +1,3 @@
-# src/agent_graph.py
 
 import json
 import os
@@ -29,7 +28,7 @@ llm_generator = ChatGoogleGenerativeAI(
     timeout=60
 )
 
-# Рецензент з температурою 0.0 pre maximálnu presnosť
+# Рецензент з температурою 0.0 pre maximalnu presnost
 llm_reviewer = ChatGoogleGenerativeAI(
     model="gemini-3.1-flash-lite-preview",
     google_api_key=google_api_key,
@@ -39,7 +38,7 @@ llm_reviewer = ChatGoogleGenerativeAI(
 )
 
 
-# --- 1. СТАН (STATE) ---
+# --- 1. State ---
 class AgentState(TypedDict):
     messages: Annotated[list[BaseMessage], add_messages]
     context_code: str
@@ -50,7 +49,7 @@ class AgentState(TypedDict):
     diagram_sequence: str
     diagram_weighted_graph: str
 
-    # Змінні pre cykly Reviewera
+    # Змінні для циклів Reviewera
     class_critique: str
     class_iteration: int
     seq_critique: str
@@ -70,7 +69,7 @@ def text_doc_node(state: AgentState):
     prompt_text = TEXT_DOC_PROMPT.format(query=enriched_query, context_code=state["context_code"][:5000])
     response = llm_generator.invoke([HumanMessage(content=prompt_text)])
 
-    time.sleep(5)  # RATE LIMIT PROTECTION
+    time.sleep(5)  # Rate limit protection
     return {"doc_text": response.content}
 
 
@@ -89,7 +88,7 @@ def class_diagram_node(state: AgentState):
     )
     response = llm_generator.invoke([HumanMessage(content=prompt_text)])
 
-    time.sleep(5)  # RATE LIMIT PROTECTION
+    time.sleep(5)
     return {"diagram_class": response.content, "class_iteration": iteration + 1}
 
 
@@ -99,7 +98,7 @@ def review_class_node(state: AgentState):
     response = llm_reviewer.invoke([HumanMessage(content=prompt)])
     print(f"Verdict: {response.content[:50]}...")
 
-    time.sleep(5)  # RATE LIMIT PROTECTION
+    time.sleep(5)
     return {"class_critique": response.content}
 
 
@@ -128,7 +127,7 @@ def review_sequence_node(state: AgentState):
     response = llm_reviewer.invoke([HumanMessage(content=prompt)])
     print(f"Verdict: {response.content[:50]}...")
 
-    time.sleep(5)  # RATE LIMIT PROTECTION
+    time.sleep(5)
     return {"seq_critique": response.content}
 
 
@@ -147,7 +146,7 @@ def weighted_graph_node(state: AgentState):
     )
     response = llm_generator.invoke([HumanMessage(content=prompt_text)])
 
-    time.sleep(5)  # RATE LIMIT PROTECTION
+    time.sleep(5)
     return {"diagram_weighted_graph": response.content, "graph_iteration": iteration + 1}
 
 
@@ -157,7 +156,7 @@ def review_graph_node(state: AgentState):
     response = llm_reviewer.invoke([HumanMessage(content=prompt)])
     print(f"Verdict: {response.content[:50]}...")
 
-    time.sleep(5)  # RATE LIMIT PROTECTION
+    time.sleep(5)
     return {"graph_critique": response.content}
 
 
@@ -167,7 +166,7 @@ def chat_node(state: AgentState):
     return {"messages": [AIMessage(content=response.content)]}
 
 
-# --- 3. ROUTERY (PODMIENENÉ HRANY) ---
+# --- 3. ROUTERY ---
 
 def main_router(state: AgentState):
     last_message = state["messages"][-1].content.lower()

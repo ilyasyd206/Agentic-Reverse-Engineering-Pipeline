@@ -2,7 +2,7 @@ import os
 import pickle
 import shutil
 import stat
-import gc  # ДОДАНО: Для примусового очищення пам'яті та зняття блокувань файлів
+import gc
 
 from langchain_community.document_loaders import DirectoryLoader, PyPDFLoader, TextLoader
 from langchain_community.vectorstores import Chroma
@@ -33,10 +33,8 @@ def remove_readonly(func, path, _):
 
 
 def build_vectorstore(docs_path):
-    # 1. ПРИМУСОВО відпускаємо базу даних з пам'яті, щоб Windows дозволив її видалити
     gc.collect()
 
-    # 2. Жорстко видаляємо стару базу
     if os.path.exists(CHROMA_DB_DIR):
         try:
             shutil.rmtree(CHROMA_DB_DIR, onerror=remove_readonly)
@@ -78,10 +76,7 @@ def build_vectorstore(docs_path):
 
 
 def load_vectorstore(path: str = None):
-    """
-    Если path указывает на pickle-файл — загружает его (для тестов).
-    Иначе пытается открыть ChromaDB по CHROMA_DB_DIR.
-    """
+
     if path and os.path.isfile(path):
         with open(path, "rb") as f:
             vectordb = pickle.load(f)
