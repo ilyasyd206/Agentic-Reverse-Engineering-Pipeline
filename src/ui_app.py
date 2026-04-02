@@ -1,5 +1,7 @@
 import os
 import sys
+import stat
+import shutil
 import subprocess  # <-- ДОДАНО ДЛЯ ВИКЛИКУ GIT
 import streamlit as st
 import streamlit.components.v1 as components
@@ -59,34 +61,45 @@ if st.sidebar.button("Prebudovať databázu"):
 
 st.sidebar.markdown("---")
 
-# --- НОВИЙ БЛОК: REPO SETUP ---
+
+def remove_readonly(func, path, _):
+    os.chmod(path, stat.S_IWRITE)
+    try:
+        func(path)
+    except Exception:
+        pass
+
+
 # --- НОВИЙ БЛОК: REPO SETUP ---
 st.sidebar.subheader("📦 Repo Setup")
-repo_url = st.sidebar.text_input("GitHub repo URL", placeholder="https://github.com/user/repo")
+repo_url = st.sidebar.text_input("GitHub repo URL", placeholder="https://github.com/psf/requests")
 
-# Жорстко задаємо шлях для клонування всередині папки docs
-CLONE_DIR = os.path.join(DOCS_PATH, "cloned_repo")
+# Створюємо ізольовану папку ТІЛЬКИ для репозиторіїв
+REPOS_DIR = os.path.join(DOCS_PATH, "repos")
+os.makedirs(REPOS_DIR, exist_ok=True)
 
 if st.sidebar.button("🔄 Clone & Build RAG"):
     if not repo_url:
         st.sidebar.warning("⚠️ Zadaj najprv GitHub URL.")
     else:
         with st.spinner("Klonujem repozitár a budujem databázu..."):
-            # 1. Видаляємо стару папку, якщо вона є (щоб не міксувати різні репозиторії)
-            import shutil
 
-            if os.path.exists(CLONE_DIR):
-                shutil.rmtree(CLONE_DIR)
+            repo_name = repo_url.rstrip("/").split("/")[-1].replace(".git", "")
+            CLONE_DIR = os.path.join(REPOS_DIR, repo_name)
 
-            os.makedirs(CLONE_DIR, exist_ok=True)
+            # Очищаємо ТІЛЬКИ папку repos (книжки в docs залишаються недоторканими!)
+            for item in os.listdir(REPOS_DIR):
+                item_path = os.path.join(REPOS_DIR, item)
+                if os.path.isdir(item_path):
+                    shutil.rmtree(item_path, onerror=remove_readonly)
+                else:
+                    os.remove(item_path)
 
-            # 2. Клонуємо репозиторій
             try:
                 subprocess.run(["git", "clone", repo_url, CLONE_DIR], capture_output=True, text=True, check=True)
-                st.sidebar.success("✅ Repozitár úspešne naklonovaný!")
+                st.sidebar.success(f"✅ Repozitár '{repo_name}' úspešne naklonovaný do {REPOS_DIR}!")
                 st.session_state.repo_ready = True
 
-                # 3. АВТОМАТИЧНО ПЕРЕБУДОВУЄМО БАЗУ ДАНИХ RAG!
                 reset_vectorstore()
                 st.sidebar.success("✅ Vektorová databáza bola aktualizovaná!")
 
@@ -94,9 +107,7 @@ if st.sidebar.button("🔄 Clone & Build RAG"):
                 st.sidebar.error(f"❌ Chyba pri klonovaní: {e.stderr}")
             except FileNotFoundError:
                 st.sidebar.error("❌ Git nie je nainštalovaný alebo nie je v PATH.")
-# ==========================================
-# ==========================================
-
+# ==========================================я
 
 # Відображення історії чату
 for msg in st.session_state.messages:
