@@ -1,4 +1,4 @@
 import os
 
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-CHROMA_DB_DIR = "db/"
+# Absolútna cesta k DB — funguje bez ohľadu na pracovný adresár
+CHROMA_DB_DIR = os.path.join(os.path.dirname(__file__), "..", "db")
