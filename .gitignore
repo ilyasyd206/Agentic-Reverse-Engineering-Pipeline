@@ -1,0 +1,7 @@
+@"
+db/
+docs/repos/
+__pycache__/
+*.pyc
+*.pickle
+"@ | Out-File -FilePath .gitignore -Encoding utf8
