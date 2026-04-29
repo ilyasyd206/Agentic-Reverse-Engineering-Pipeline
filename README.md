@@ -9,7 +9,7 @@ An advanced automated system for source code analysis and architectural visualiz
 ## 🚀 Key Features
 
 - **Multi-Agent Orchestration**: Powered by **LangGraph**, the system manages a "Generator" and a "Reviewer" agent to ensure high-fidelity outputs.
-- **Self-Correction Loop**: Every generated diagram is scrutinized by an AI Reviewer against strict metrics (Syntax, OOP, Clean Architecture, IEEE standards). If the score is $< 8/10$, the system automatically regenerates the output.
+- **Self-Correction Loop**: Every generated diagram is scrutinized by an AI Reviewer against strict metrics (Syntax, OOP, Clean Architecture, IEEE standards). If the score is $< 7/10$, the system automatically regenerates the output.
 - **Automated Repository Ingestion**: Built-in GitHub integration that clones repositories directly into a **RAG (Retrieval-Augmented Generation)** pipeline.
 - **Semantic Code Understanding**: Uses **ChromaDB** and semantic chunking to provide the LLM with deep context, moving beyond simple keyword search.
 - **Architectural Artifacts**: Generates:
@@ -21,7 +21,7 @@ An advanced automated system for source code analysis and architectural visualiz
 ## 🛠️ Tech Stack
 
 - **Core Framework**: [LangGraph](https://www.langchain.com/langgraph), [LangChain](https://www.langchain.com/)
-- **LLM**: Google Gemini 1.5 Flash / Flash-Lite
+- **LLM**: Google Gemini 3.1 Flash-Lite
 - **Vector Database**: ChromaDB
 - **UI**: Streamlit
 - **Visualization**: PlantUML Server
